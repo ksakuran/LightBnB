@@ -147,10 +147,74 @@ exports.getAllReservations = getAllReservations;
 
 
 const getAllProperties = (options, limit = 10) => {
+
+  const city = options.city;
+  const owner = options.owner_id;
+  const minPrice = `${options.minimum_price_per_night}`;
+  const maxPrice = `${options.maximum_price_per_night}`;
+  const minRating = options.minimum_rating;
+
+  let whereOrAnd = ` AND`
+  let queryParams = [];
+  let queryString = `SELECT properties.*, AVG(property_reviews.rating) as average_rating
+  FROM properties
+  LEFT JOIN property_reviews ON properties.id = property_id`
+
+  if (city) {
+    queryParams.push(`%${city}%`);
+    queryString += ` WHERE city LIKE $${queryParams.length}`;
+  }
+
+  if (owner) {
+    queryParams.push(`${owner}`);
+     if (queryParams.length === 0) {
+      whereOrAnd = ` WHERE`;
+     }
+     queryString += `${whereOrAnd} owner_id = $${queryParams.length}`;
+
+  }
+
+  if (minPrice) {
+    queryParams.push(`${minPrice}00`);
+    if (queryParams.length === 0) {
+      whereOrAnd = ` WHERE`;
+     }
+    queryString += `${whereOrAnd} properties.cost_per_night >= $${queryParams.length}`;
+  }
+
+  if (maxPrice) {
+    queryParams.push(`${maxPrice}00`);
+    if (queryParams.length === 0) {
+      whereOrAnd = ` WHERE`;
+     }
+    queryString += `${whereOrAnd} properties.cost_per_night <= $${queryParams.length}`;
+  }
+
+  if (minRating) {
+    queryParams.push(`${minRating}`);
+    queryString += ` GROUP BY properties.id HAVING AVG(property_reviews.rating) >= $${queryParams.length} `;
+    queryParams.push(limit);
+    queryString += ` 
+    ORDER BY cost_per_night
+    LIMIT $${queryParams.length};
+    `;
+  }
+
+  if (!minRating) {
+    queryParams.push(limit);
+    queryString += ` 
+    GROUP BY properties.id
+    ORDER BY cost_per_night
+    LIMIT $${queryParams.length};
+    `;
+  }
+  
+
+  console.log(queryString, queryParams);
+
  return pool
     .query(
-      `SELECT * FROM properties
-      LIMIT $1;`, [limit])
+      queryString, queryParams)
     .then((result) => {
       return result.rows
     })
